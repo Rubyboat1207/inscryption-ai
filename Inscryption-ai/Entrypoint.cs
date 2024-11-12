@@ -169,7 +169,7 @@ namespace Inscryption_ai
                     {"ability", new Dictionary<string, object>
                     {
                         {"type", "string"},
-                        {"description", "the ID of the ability to search."}
+                        {"description", "the ID of the ability to search. Case sensitive. (often no spaces and is PascalCase)"}
                     }}
                 }}
             }));
