@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Inscryption_ai
@@ -16,12 +17,15 @@ namespace Inscryption_ai
 
         [JsonPropertyName("action_id")]
         public string ActionId { get; set; }
+        
+        [JsonPropertyName("action_name")]
+        public string ActionName { get; set; }
 
         [JsonPropertyName("result")]
         public JsonElement Result { get; set; }
 
         [JsonPropertyName("params")]
-        public JsonElement Params { get; set; }
+        public string Params { get; set; }
     }
 
     /**
@@ -37,12 +41,12 @@ namespace Inscryption_ai
      */
     public class RegisterAction
     {
-        [JsonPropertyName("type")] public string Type => "actions/register";
-        [JsonPropertyName("name")] public string Name;
-        [JsonPropertyName("description")] public string Description;
-        [JsonPropertyName("schema")] public JsonElement Schema;
+        [JsonPropertyName("path")] public string Type => "actions/register";
+        [JsonPropertyName("name")] public string Name { get; set; }
+        [JsonPropertyName("description")] public string Description { get; set; }
+        [JsonPropertyName("schema")] public Dictionary<string, object> Schema { get; set; }
 
-        public RegisterAction(string name, string description, JsonElement schema)
+        public RegisterAction(string name, string description, Dictionary<string, object> schema)
         {
             Name = name;
             Description = description;
@@ -50,7 +54,30 @@ namespace Inscryption_ai
         }
     }
 
-// Factory method to parse and return the appropriate response type based on the "type" field
+    public class ActionResponse
+    {
+        [JsonPropertyName("path")] public string Type => "action/result";
+        [JsonPropertyName("action_id")] public string ActionId { get; set; }
+        [JsonPropertyName("result")] public string Result { get; set; }
+
+        public ActionResponse(string actionId, string result)
+        {
+            ActionId = actionId;
+            Result = result;
+        }
+    }
+
+    public class AddEnvironmentContext
+    {
+        [JsonPropertyName("path")] public string Type => "context/environment";
+        [JsonPropertyName("value")] public string Value { get; set; }
+
+        public AddEnvironmentContext(string value)
+        {
+            Value = value;
+        }
+    }
+
     public static class WebSocketResponseFactory
     {
         public static WebSocketResponse ParseResponse(string json)

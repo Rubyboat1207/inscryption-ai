@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Inscryption-ai")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+737feb13983a112e0c2527f16889a2ea0dabe340")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9a111fd8036f81f325c27fc3c04fcc89955b59ec")]
 [assembly: System.Reflection.AssemblyProductAttribute("Inscryption-ai")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Inscryption-ai")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

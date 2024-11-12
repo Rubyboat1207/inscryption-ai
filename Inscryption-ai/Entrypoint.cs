@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -13,13 +12,16 @@ namespace Inscryption_ai
     [BepInPlugin("net.rubyboat.plugins.inscryption-ai", "Inscryption AI", "1.0.0")]
     public class Entrypoint : BaseUnityPlugin
     {
-        private readonly ClientWebSocket _ws = new ClientWebSocket();
+        private ClientWebSocket _ws;
         private const int Port = 9302;
         private bool Connected { get; set; }
         public List<WebSocketResponse> Responses { get; set; } = new List<WebSocketResponse>();
 
-        private async Task AttemptWebsocketConnection(Action callback)
+        public Dictionary<string, Func<string>> ActionRegistry { get; set; }
+
+        private async Task AttemptWebsocketConnection(Func<Task> callback)
         {
+            Console.WriteLine("Attempting websocket connection...");
             var attempts = 0;
             while (!Connected)
             {
@@ -28,11 +30,28 @@ namespace Inscryption_ai
                     Console.WriteLine($"Connections have failed. Trying again. (attempts: {attempts})");
                 }
 
-                await _ws.ConnectAsync(new Uri("ws://localhost:" + Port), CancellationToken.None);
+                _ws = new ClientWebSocket();  // Create a new ClientWebSocket instance
+
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    try
+                    {
+                        await _ws.ConnectAsync(new Uri("ws://localhost:" + Port), cts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Console.WriteLine("Connection attempt timed out.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Connection attempt failed: {ex.Message}");
+                    }
+                }
+
                 if (_ws.State == WebSocketState.Open)
                 {
                     Connected = true;
-                    callback();
+                    await callback();
                 }
                 else
                 {
@@ -40,60 +59,154 @@ namespace Inscryption_ai
                 }
 
                 attempts++;
-
             }
+        }
 
-            var buffer = new byte[1024 * 4];
-
-            while (_ws.State == WebSocketState.Open)
+        private async Task PollMessages()
+        {
+            while (true)
             {
-                WebSocketReceiveResult result;
-                var message = new StringBuilder();
+                Console.WriteLine("Polling messages...");
+                var buffer = new byte[1024 * 4];
 
-                do
+                try
                 {
-                    result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    var receivedMessage = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    Responses.Add(WebSocketResponseFactory.ParseResponse(receivedMessage));
-                } while (!result.EndOfMessage);
+                    // Keep polling while the WebSocket state is open
+                    while (_ws.State == WebSocketState.Open)
+                    {
+                        WebSocketReceiveResult result;
+                        var message = new StringBuilder();
 
-                Console.WriteLine("Message received: " + message);
+                        do
+                        {
+                            result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                            if (result.MessageType == WebSocketMessageType.Close)
+                            {
+                                Console.WriteLine("Connection closed by the server.");
+                                break;
+                            }
+
+                            message.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+
+                        } while (!result.EndOfMessage);
+
+                        // Process message if it's fully received
+                        if (result.MessageType != WebSocketMessageType.Close)
+                        {
+                            Responses.Add(WebSocketResponseFactory.ParseResponse(message.ToString()));
+                            Console.WriteLine("Message received: " + message);
+                        }
+                    }
+                }
+                catch (WebSocketException ex)
+                {
+                    Console.WriteLine($"WebSocket error: {ex.Message}");
+                }
+
+                Console.WriteLine("Connection Broken");
+
+                // Attempt to reconnect if the connection is lost
+                Connected = false;
+                await AttemptWebsocketConnection(async () =>
+                {
+                    Console.WriteLine("Connection re-established.");
+                    await PollMessages();
+                });
+                break; // Exit the current PollMessages loop since a new one will be started upon reconnection
             }
         }
 
         private void Awake()
         {
-            AttemptWebsocketConnection(() =>
+            Console.WriteLine("Entrypoint: Awake called");
+            ActionRegistry = new Dictionary<string, Func<string>>()
             {
-                Console.WriteLine("Websocket connection established!");
-            }).Start();
+                ["ring_bell"] = () =>
+                {
+                    Actions.RingBell();
+                    return "Bell Rang";
+                }
+            };
+            
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await AttemptWebsocketConnection(async () =>
+                    {
+                        Console.WriteLine("Websocket connection established.");
+                        await PollMessages();
+                    });
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+            });
         }
 
         private async Task SendAllActions()
         {
-            await SendAction(new RegisterAction("hello", "says hello in console", new JsonElement()));
+            await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
         }
-
-        private async Task SendAction(RegisterAction action)
+        
+        private async Task Send(object action)
         {
+            var message = JsonSerializer.Serialize(action);
+            Console.WriteLine("Sending: " + message);
+            var bytes = Encoding.UTF8.GetBytes(message);
             await _ws.SendAsync(
-                new ArraySegment<byte>(Encoding.UTF8.GetBytes(
-                    JsonSerializer.Serialize(action)
-                )),
+                new ArraySegment<byte>(bytes),
                 WebSocketMessageType.Text,
                 true,
                 CancellationToken.None
             );
         }
-
+        
         private void Update()
         {
             if (Responses.Count <= 0) return;
-            foreach (var _ in Responses.Where(response => response.Type == "send_all_actions"))
+            
+            Console.WriteLine("Updating messages...");
+            foreach (var res in Responses)
             {
-                Console.WriteLine("Sending all actions");
-                SendAllActions().Start();
+                switch (res.Type)
+                {
+                    case "send_all_actions":
+                        Console.WriteLine("Sending all actions");
+                        _ = SendAllActions();
+                        break;
+                    case "execute_action":
+                        Console.WriteLine("Executing action " + res.ActionName);
+
+                        try
+                        {
+                            string actionResult = ActionRegistry[res.ActionName].Invoke();
+                            _ = Send(new ActionResponse(res.ActionId, actionResult));
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                            _ = Send(new ActionResponse(res.ActionId, "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                        }
+
+                        break;
+                    default:
+                        Console.WriteLine("Unknown request from AI");
+                        Console.WriteLine(res.Type);
+                        break;
+                }
             }
+            Console.WriteLine("Actions executed. clearing responses");
+            Responses.Clear();
+        }
+
+        private string HelloConsole()
+        {
+            Console.WriteLine("Hello");
+
+            return "OK";
         }
     }
 }

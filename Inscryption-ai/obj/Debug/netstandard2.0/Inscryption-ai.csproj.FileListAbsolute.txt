@@ -8,3 +8,4 @@ F:\Dev\cs\Inscryption-ai\Inscryption-ai\obj\Debug\netstandard2.0\Inscryption-ai.
 F:\Dev\cs\Inscryption-ai\Inscryption-ai\obj\Debug\netstandard2.0\Inscryption-ai.csproj.CoreCompileInputs.cache
 F:\Dev\cs\Inscryption-ai\Inscryption-ai\obj\Debug\netstandard2.0\Inscryption-ai.dll
 F:\Dev\cs\Inscryption-ai\Inscryption-ai\obj\Debug\netstandard2.0\Inscryption-ai.pdb
+F:\Dev\cs\Inscryption-ai\Inscryption-ai\obj\Debug\netstandard2.0\Inscryption-ai.sourcelink.json
