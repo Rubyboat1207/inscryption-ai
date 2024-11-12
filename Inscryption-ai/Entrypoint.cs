@@ -6,18 +6,27 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BepInEx;
+using HarmonyLib;
 
 namespace Inscryption_ai
 {    
     [BepInPlugin("net.rubyboat.plugins.inscryption-ai", "Inscryption AI", "1.0.0")]
     public class Entrypoint : BaseUnityPlugin
     {
+        public static Entrypoint Instance;
         private ClientWebSocket _ws;
         private const int Port = 9302;
         private bool Connected { get; set; }
         public List<WebSocketResponse> Responses { get; set; } = new List<WebSocketResponse>();
 
-        public Dictionary<string, Func<string>> ActionRegistry { get; set; }
+        public Dictionary<string, Func<string, string>> ActionRegistry { get; set; }
+
+        public Entrypoint() : base()
+        {
+            var harmony = new Harmony(Info.Metadata.GUID);
+            
+            harmony.PatchAll();
+        }
 
         private async Task AttemptWebsocketConnection(Func<Task> callback)
         {
@@ -120,13 +129,16 @@ namespace Inscryption_ai
         private void Awake()
         {
             Console.WriteLine("Entrypoint: Awake called");
-            ActionRegistry = new Dictionary<string, Func<string>>()
+            if (Instance != null)
             {
-                ["ring_bell"] = () =>
-                {
-                    Actions.RingBell();
-                    return "Bell Rang";
-                }
+                Destroy(this);
+                return;
+            }
+            Instance = this;
+            ActionRegistry = new Dictionary<string, Func<string, string>>()
+            {
+                ["ring_bell"] = _ => Actions.RingBell(),
+                ["get_ability_info"] = Actions.CheckRuleBook
             };
             
             Task.Run(async () =>
@@ -149,9 +161,21 @@ namespace Inscryption_ai
         private async Task SendAllActions()
         {
             await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            await Send(new RegisterAction("get_ability_info", "Gives you information about the function of an ability", new Dictionary<string, object>()
+            {
+                {"type", "object"},
+                {"properties", new Dictionary<string, object>
+                {
+                    {"ability", new Dictionary<string, object>
+                    {
+                        {"type", "string"},
+                        {"description", "the ID of the ability to search."}
+                    }}
+                }}
+            }));
         }
         
-        private async Task Send(object action)
+        public async Task Send(object action)
         {
             var message = JsonSerializer.Serialize(action);
             Console.WriteLine("Sending: " + message);
@@ -182,7 +206,7 @@ namespace Inscryption_ai
 
                         try
                         {
-                            string actionResult = ActionRegistry[res.ActionName].Invoke();
+                            string actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
                             _ = Send(new ActionResponse(res.ActionId, actionResult));
                         }
                         catch (Exception e)
@@ -200,13 +224,6 @@ namespace Inscryption_ai
             }
             Console.WriteLine("Actions executed. clearing responses");
             Responses.Clear();
-        }
-
-        private string HelloConsole()
-        {
-            Console.WriteLine("Hello");
-
-            return "OK";
         }
     }
 }
