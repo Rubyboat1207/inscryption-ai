@@ -28,17 +28,6 @@ namespace Inscryption_ai
         public string Params { get; set; }
     }
 
-    /**
-     * {
-    "path": "actions/register",
-    "name": "test",
-    "description": "does nothing",
-    "schema": {
-        "type": "object",
-        "properties": {}
-    }
-}
-     */
     public class RegisterAction
     {
         [JsonPropertyName("path")] public string Type => "actions/register";
