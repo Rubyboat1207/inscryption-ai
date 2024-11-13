@@ -50,7 +50,7 @@ namespace Inscryption_ai
 
         private static IEnumerator CloseBook()
         {
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSeconds(5f);
             Singleton<RuleBookController>.Instance.SetShown(false);
         }
 
