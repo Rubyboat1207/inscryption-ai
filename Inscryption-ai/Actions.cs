@@ -1,9 +1,11 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using DiskCardGame;
 using Inscryption_ai.Extensions;
 using UnityEngine;
@@ -27,7 +29,7 @@ namespace Inscryption_ai
             return "Bell was not pressable at this time.";
         }
 
-        class CheckAbilityRuleBook
+        private class CheckAbilityRuleBook
         {
             [JsonPropertyName("ability")]
             public string Ability { get; set; }
@@ -35,15 +37,15 @@ namespace Inscryption_ai
         
         public static string CheckRuleBook(string abilityNameJson)
         {
-            string abilityName = JsonSerializer.Deserialize<CheckAbilityRuleBook>(abilityNameJson).Ability;
+            var abilityName = JsonSerializer.Deserialize<CheckAbilityRuleBook>(abilityNameJson).Ability;
             
             Singleton<RuleBookController>.Instance.OpenToAbilityPage(abilityName, null, true);
             Singleton<BoardManager>.Instance.StartCoroutine(CloseBook());
             
-            Ability ability = Singleton<RuleBookController>.Instance.PageData.Find((RuleBookPageInfo x) =>
+            var ability = Singleton<RuleBookController>.Instance.PageData.Find((RuleBookPageInfo x) =>
                 x.abilityPage && x.pageId == abilityName).ability;
 
-            AbilityInfo info = AbilitiesUtil.GetInfo(ability);
+            var info = AbilitiesUtil.GetInfo(ability);
 
             return info.LocalizedRulebookDescription.Replace("[creature]", Localization.Translate("a card bearing this sigil"));;
         }
@@ -71,11 +73,11 @@ namespace Inscryption_ai
 
             public int PlacementIndex { get; set; }
         }
-        public static string PlayCardInHand(string cardInHandJson)
+        public static async Task<string> PlayCardInHand(string cardInHandJson)
         {
             var info = JsonSerializer.Deserialize<PlayCardInHandStructure>(cardInHandJson);
             var slot = Singleton<BoardManager>.Instance.PlayerSlotsCopy[info.PlacementIndex];
-            if (slot.Card != null)
+            if (slot.Card != null && !info.SacrificeIndexes.Contains(info.PlacementIndex))
             {
                 return "There is a card in that slot already.";
             }
@@ -84,22 +86,27 @@ namespace Inscryption_ai
             
             // select card before returning so leshy can send you a message about it.
             Singleton<PlayerHand>.Instance.OnCardSelected(card);
-
             if (!card.CanPlay())
             {
-                return "Not successful, more context coming soon";
+                return $"You were unable to play the {card.name}. The reason why may come soon.";
             }
 
-            
-
+            await Task.Delay(TimeSpan.FromSeconds(0.75));
+            if (info.SacrificeIndexes.Length > 0)
+            {
+                await Task.Delay(2);
+            }
             foreach (int idx in info.SacrificeIndexes)
             {
-                PlayableCard sac = Singleton<BoardManager>.Instance.PlayerSlotsCopy[idx].Card;
-                sac.Sacrifice();
+                CardSlot sac = Singleton<BoardManager>.Instance.PlayerSlotsCopy[idx];
+                Singleton<BoardManager>.Instance.OnSlotSelected(sac);
+                await Task.Delay(TimeSpan.FromSeconds(1.2));
             }
             
-            Singleton<BoardManager>.Instance.StartCoroutine(Singleton<BoardManager>.Instance.AssignCardToSlot(card, slot));
-
+            // Singleton<BoardManager>.Instance.StartCoroutine(Singleton<BoardManager>.Instance.AssignCardToSlot(card, slot));
+            
+            Singleton<BoardManager>.Instance.OnSlotSelected(slot);
+            
             return "Placement Successful";
         }
         

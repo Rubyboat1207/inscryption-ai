@@ -8,7 +8,7 @@ namespace Inscryption_ai.Extensions
         public static string DescribeToAI(this PlayableCard card, bool includeCost=true)
         {
             string info =
-                $"{card.name}. It deals {card.Attack} damage, has {card.Health} health.";
+                $"{card.name}. It deals {card.Attack} damage, has {card.Health - card.Status.damageTaken} health.";
 
             if (includeCost)
             {

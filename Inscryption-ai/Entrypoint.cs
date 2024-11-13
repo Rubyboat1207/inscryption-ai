@@ -23,6 +23,7 @@ namespace Inscryption_ai
         public List<WebSocketResponse> Responses { get; set; } = new List<WebSocketResponse>();
 
         public Dictionary<string, Func<string, string>> ActionRegistry { get; set; }
+        public Dictionary<string, Func<string, Task<string>>> AsyncActionRegistry { get; set; }
 
         public Entrypoint() : base()
         {
@@ -143,8 +144,12 @@ namespace Inscryption_ai
                 ["ring_bell"] = _ => Actions.RingBell(),
                 ["get_ability_info"] = Actions.CheckRuleBook,
                 ["get_cards_in_hand"] = _ => Actions.GetCardsInHand(),
-                ["play_card_in_hand"] = Actions.PlayCardInHand,
                 ["see_board_state"] = _ => Singleton<BoardManager>.Instance.DescribeStateToAI(),
+            };
+
+            AsyncActionRegistry = new Dictionary<string, Func<string, Task<string>>>
+            {
+                ["play_card_in_hand"] = Actions.PlayCardInHand,
             };
             
             Task.Run(async () =>
@@ -197,7 +202,7 @@ namespace Inscryption_ai
                         {
                             {"type", "number"}
                         }},
-                        {"description", "If the card requires blood, the corresponding number of cards must be sacrificed, each giving 1 blood. if no blood is required, provide an empty array. Friendly board indices only."}
+                        {"description", "If the card requires blood, the corresponding number of cards must be sacrificed, each giving 1 blood. Friendly board indices only. THIS IS NOT NULLABLE. THIS MUST BE PROVIDED."}
                     }},
                     {"placement_index", new Dictionary<string, object>
                     {
@@ -207,6 +212,11 @@ namespace Inscryption_ai
                 }}
             }));
             await Send(new RegisterAction("see_board_state", "Gives you information about the board", new Dictionary<string, object>() {}));
+            await Send(new AddEnvironmentContext(
+                "Always wait for the results of actions before proceeding to the next step. Check the board state and hand after each action. Play the best card available based on the current board state and hand, focusing on strategy. Prioritize sacrificing cards when necessary to summon more powerful cards. Communicate clearly about actions taken and decisions made during the game."));
+            await Send(new AddEnvironmentContext(
+                "When facing a strong enemy like a Grizzly, prioritize playing defensive cards and using sacrifices wisely. Always check your hand and board after each action. Utilize cards with defensive abilities like the River Snapper when possible. Squirrels are essential for quick sacrifices, enabling powerful plays with cards like Wolves. Remember the power of sigils like Evolve and DebuffEnemy to strengthen your board presence and weaken foes. Plan sacrifices carefully to maintain a balanced hand and responsive board."));
+            
         }
         
         public async Task Send(object action)
@@ -221,10 +231,26 @@ namespace Inscryption_ai
                 CancellationToken.None
             );
         }
+
+        private async Task RunActionAsync(WebSocketResponse res)
+        {
+            try
+            {
+                var actionResult = await AsyncActionRegistry[res.ActionName].Invoke(res.Params);
+                await Send(new ActionResponse(res.ActionId, actionResult));
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e);
+                await Send(new ActionResponse(res.ActionId, "Action failed. Say this exactly along with whatever else: \"Tell Rubyboat there is a problem with the inscryption mod.\""));
+            }
+
+        } 
         
         private void Update()
         {
             if (Responses.Count <= 0) return;
+            bool played_this_turn = false;
             try
             {
                 Console.WriteLine("Updating messages...");
@@ -238,18 +264,45 @@ namespace Inscryption_ai
                             break;
                         case "execute_action":
                             Console.WriteLine("Executing action " + res.ActionName);
+                            if (res.ActionName == "play_card_in_hand")
+                            {
+                                if (played_this_turn)
+                                {
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Only one play per action set. send it again, after checking board state and your hand."));
+                                    continue;
+                                }
 
-                            try
-                            {
-                                string actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
-                                _ = Send(new ActionResponse(res.ActionId, actionResult));
+                                played_this_turn = true;
                             }
-                            catch (Exception e)
+                            if (ActionRegistry.ContainsKey(res.ActionName))
                             {
-                                Console.WriteLine(e);
-                                _ = Send(new ActionResponse(res.ActionId,
-                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                                try
+                                {
+                                    var actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
+                                    _ = Send(new ActionResponse(res.ActionId, actionResult));
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.Error.WriteLine(e);
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                                }
+                            }else if (AsyncActionRegistry.ContainsKey(res.ActionName))
+                            {
+                                try
+                                {
+                                    _ = RunActionAsync(res);
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine(e);
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                                }
                             }
+
+                            
 
                             break;
                         default:

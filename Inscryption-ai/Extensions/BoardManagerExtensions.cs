@@ -11,7 +11,7 @@ namespace Inscryption_ai.Extensions
             
             for (var i = 0; i < queue.Length; i++)
             {
-                queue[i] = $"[ QUEUE SLOT {i} - EMPTY ]";
+                queue[i] = $"[ ENEMY QUEUE SLOT {i} - EMPTY ]";
             }
 
             for (var i = 0; i < slots.Length; i++)
@@ -26,7 +26,7 @@ namespace Inscryption_ai.Extensions
                 }
 
 
-                slots[i] = $"[ {(i < 4 ? "ENEMY" : "FRIENDLY")} SLOT {i % 4} - ";
+                slots[i] = $"[ {(i < 4 ? "FRIENDLY" : "ENEMY")} SLOT {i % 4} - ";
 
                 if (slot.Card == null)
                 {
@@ -52,7 +52,7 @@ namespace Inscryption_ai.Extensions
                 }
             }
 
-            return string.Join(" ", queue)+ " " + string.Join(" ", slots);
+            return string.Join(" ", slots) + "\n" + string.Join(" ", queue);
         }
     }
 }
