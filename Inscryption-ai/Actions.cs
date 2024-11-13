@@ -1,8 +1,11 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DiskCardGame;
+using Inscryption_ai.Extensions;
 using UnityEngine;
 
 namespace Inscryption_ai
@@ -50,5 +53,39 @@ namespace Inscryption_ai
             yield return new WaitForSeconds(1.5f);
             Singleton<RuleBookController>.Instance.SetShown(false);
         }
+
+        public static string GetCardsInHand()
+        {
+            return string.Join(
+                ", ", Singleton<PlayerHand>.Instance.CardsInHand.Select(card => card.DescribeToAI()).ToList()
+            );
+        }
+        
+        class PlayCardInHandStructure
+        {
+            [JsonPropertyName("card_idx")]
+            public int CardIndex { get; set; }
+            [JsonPropertyName("sacrifice_indexes")]
+
+            public int[] SacrificeIndexes { get; set; }
+        }
+        public static string PlayCardInHand(string cardInHandJson)
+        {
+            var info = JsonSerializer.Deserialize<PlayCardInHandStructure>(cardInHandJson);
+
+            var card = Singleton<PlayerHand>.Instance.CardsInHand[info.CardIndex];
+            
+            // select card before returning so leshy can send you a message about it.
+            Singleton<PlayerHand>.Instance.OnCardSelected(card);
+
+            if (!card.CanPlay())
+            {
+                return "Not successful, more context coming soon";
+            }
+
+            return "card selected. user will do the rest of the work.";
+        }
+        
+        
     }
 }
