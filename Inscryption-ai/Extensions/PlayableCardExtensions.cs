@@ -8,18 +8,18 @@ namespace Inscryption_ai.Extensions
         public static string DescribeToAI(this PlayableCard card, bool includeCost=true)
         {
             string info =
-                $"Card is {card.name}. It deals {card.Attack} damage, has {card.Health} health.";
+                $"{card.name}. It deals {card.Attack} damage, has {card.Health} health.";
 
             if (includeCost)
             {
                 if (card.Info.BloodCost > 0)
                 {
-                    info += $"This card costs {card.Info.BloodCost} blood.";
+                    info += $"This card costs {card.Info.BloodCost} blood this is the amount of cards you must sacrifice to play this card. ";
                 }
 
                 if (card.Info.BonesCost > 0)
                 {
-                    info += $"This card costs {card.Info.BonesCost} bones. You currently have {Singleton<ResourcesManager>.Instance.PlayerBones} bones.";
+                    info += $"This card costs {card.Info.BonesCost} bones. You currently have {Singleton<ResourcesManager>.Instance.PlayerBones} bones. ";
                 }
             }
 

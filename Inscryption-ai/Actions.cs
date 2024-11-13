@@ -38,7 +38,7 @@ namespace Inscryption_ai
             string abilityName = JsonSerializer.Deserialize<CheckAbilityRuleBook>(abilityNameJson).Ability;
             
             Singleton<RuleBookController>.Instance.OpenToAbilityPage(abilityName, null, true);
-            Entrypoint.Instance.StartCoroutine(CloseBook());
+            Singleton<BoardManager>.Instance.StartCoroutine(CloseBook());
             
             Ability ability = Singleton<RuleBookController>.Instance.PageData.Find((RuleBookPageInfo x) =>
                 x.abilityPage && x.pageId == abilityName).ability;
@@ -56,9 +56,8 @@ namespace Inscryption_ai
 
         public static string GetCardsInHand()
         {
-            return string.Join(
-                ", ", Singleton<PlayerHand>.Instance.CardsInHand.Select(card => card.DescribeToAI()).ToList()
-            );
+            var i = 0;
+            return Singleton<PlayerHand>.Instance.CardsInHand.Aggregate("", (current, card) => current + $"[{i++} - {card.DescribeToAI()}]");
         }
         
         class PlayCardInHandStructure
@@ -68,10 +67,18 @@ namespace Inscryption_ai
             [JsonPropertyName("sacrifice_indexes")]
 
             public int[] SacrificeIndexes { get; set; }
+            [JsonPropertyName("placement_index")]
+
+            public int PlacementIndex { get; set; }
         }
         public static string PlayCardInHand(string cardInHandJson)
         {
             var info = JsonSerializer.Deserialize<PlayCardInHandStructure>(cardInHandJson);
+            var slot = Singleton<BoardManager>.Instance.PlayerSlotsCopy[info.PlacementIndex];
+            if (slot.Card != null)
+            {
+                return "There is a card in that slot already.";
+            }
 
             var card = Singleton<PlayerHand>.Instance.CardsInHand[info.CardIndex];
             
@@ -83,7 +90,17 @@ namespace Inscryption_ai
                 return "Not successful, more context coming soon";
             }
 
-            return "card selected. user will do the rest of the work.";
+            
+
+            foreach (int idx in info.SacrificeIndexes)
+            {
+                PlayableCard sac = Singleton<BoardManager>.Instance.PlayerSlotsCopy[idx].Card;
+                sac.Sacrifice();
+            }
+            
+            Singleton<BoardManager>.Instance.StartCoroutine(Singleton<BoardManager>.Instance.AssignCardToSlot(card, slot));
+
+            return "Placement Successful";
         }
         
         

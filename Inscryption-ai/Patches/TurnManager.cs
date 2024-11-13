@@ -1,5 +1,6 @@
 ﻿using DiskCardGame;
 using HarmonyLib;
+using Inscryption_ai.Extensions;
 
 namespace Inscryption_ai.Patches
 {
@@ -18,6 +19,11 @@ namespace Inscryption_ai.Patches
             info += $"The battle is of type {encounterData.opponentType} at difficulty {encounterData.Difficulty}.";
             
             _ = Entrypoint.Instance.Send(new AddEnvironmentContext(info));
+        }
+
+        public static void Postfix()
+        {
+            _ = Entrypoint.Instance.Send(new AddEnvironmentContext(Singleton<BoardManager>.Instance.DescribeStateToAI()));
         }
     }
 }

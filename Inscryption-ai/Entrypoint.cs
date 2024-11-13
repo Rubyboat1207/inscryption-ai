@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BepInEx;
+using DiskCardGame;
 using HarmonyLib;
+using Inscryption_ai.Extensions;
 
 namespace Inscryption_ai
 {    
@@ -138,7 +141,10 @@ namespace Inscryption_ai
             ActionRegistry = new Dictionary<string, Func<string, string>>()
             {
                 ["ring_bell"] = _ => Actions.RingBell(),
-                ["get_ability_info"] = Actions.CheckRuleBook
+                ["get_ability_info"] = Actions.CheckRuleBook,
+                ["get_cards_in_hand"] = _ => Actions.GetCardsInHand(),
+                ["play_card_in_hand"] = Actions.PlayCardInHand,
+                ["see_board_state"] = _ => Singleton<BoardManager>.Instance.DescribeStateToAI(),
             };
             
             Task.Run(async () =>
@@ -160,7 +166,8 @@ namespace Inscryption_ai
 
         private async Task SendAllActions()
         {
-            await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            // await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            await Send(new RegisterAction("get_cards_in_hand", "Gets all of the cards currently in hand. Always run and wait for result before playing anything.", new Dictionary<string, object>() {}));
             await Send(new RegisterAction("get_ability_info", "Gives you information about the function of an ability", new Dictionary<string, object>()
             {
                 {"type", "object"},
@@ -173,6 +180,33 @@ namespace Inscryption_ai
                     }}
                 }}
             }));
+            await Send(new RegisterAction("play_card_in_hand", "Gives you information about the function of an ability", new Dictionary<string, object>()
+            {
+                {"type", "object"},
+                {"properties", new Dictionary<string, object>
+                {
+                    {"card_idx", new Dictionary<string, object>
+                    {
+                        {"type", "number"},
+                        {"description", "The index of the card you wish to play. Remember to re-check your hand to get updated indices after playing."}
+                    }},
+                    {"sacrifice_indexes", new Dictionary<string, object>
+                    {
+                        {"type", "array"},
+                        {"items", new Dictionary<string, object>
+                        {
+                            {"type", "number"}
+                        }},
+                        {"description", "If the card requires blood, the corresponding number of cards must be sacrificed, each giving 1 blood. if no blood is required, provide an empty array. Friendly board indices only."}
+                    }},
+                    {"placement_index", new Dictionary<string, object>
+                    {
+                        {"type", "number"},
+                        {"description", "What index on the board to place in. Friendly board indices only."}
+                    }}
+                }}
+            }));
+            await Send(new RegisterAction("see_board_state", "Gives you information about the board", new Dictionary<string, object>() {}));
         }
         
         public async Task Send(object action)
@@ -191,39 +225,57 @@ namespace Inscryption_ai
         private void Update()
         {
             if (Responses.Count <= 0) return;
-            
-            Console.WriteLine("Updating messages...");
-            foreach (var res in Responses)
+            try
             {
-                switch (res.Type)
+                Console.WriteLine("Updating messages...");
+                foreach (var res in Responses.ToList())
                 {
-                    case "send_all_actions":
-                        Console.WriteLine("Sending all actions");
-                        _ = SendAllActions();
-                        break;
-                    case "execute_action":
-                        Console.WriteLine("Executing action " + res.ActionName);
+                    switch (res.Type)
+                    {
+                        case "send_all_actions":
+                            Console.WriteLine("Sending all actions");
+                            _ = SendAllActions();
+                            break;
+                        case "execute_action":
+                            Console.WriteLine("Executing action " + res.ActionName);
 
-                        try
-                        {
-                            string actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
-                            _ = Send(new ActionResponse(res.ActionId, actionResult));
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e);
-                            _ = Send(new ActionResponse(res.ActionId, "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
-                        }
+                            try
+                            {
+                                string actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
+                                _ = Send(new ActionResponse(res.ActionId, actionResult));
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e);
+                                _ = Send(new ActionResponse(res.ActionId,
+                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                            }
 
-                        break;
-                    default:
-                        Console.WriteLine("Unknown request from AI");
-                        Console.WriteLine(res.Type);
-                        break;
+                            break;
+                        default:
+                            Console.WriteLine("Unknown request from AI");
+                            Console.WriteLine(res.Type);
+                            break;
+                    }
                 }
             }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occured during foreach");
+                Console.WriteLine(e);
+            } 
+            
             Console.WriteLine("Actions executed. clearing responses");
-            Responses.Clear();
+            try
+            {
+                Responses.Clear();
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine("Error occured while clearing");
+                Console.WriteLine(e);
+            }
+            
         }
     }
 }
