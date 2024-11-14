@@ -9,7 +9,8 @@ namespace Inscryption_ai.Patches
     {
         public static void Postfix()
         {
-            _ = Entrypoint.Instance.Send(new AddEnvironmentContext(Singleton<BoardManager>.Instance.DescribeStateToAI()));
+            // _ = Entrypoint.Instance.Send(new AddEnvironmentContext(Singleton<BoardManager>.Instance.DescribeStateToAI()));
+            _ = Entrypoint.Instance.Send(new RequestAction());
         }
     }
 }

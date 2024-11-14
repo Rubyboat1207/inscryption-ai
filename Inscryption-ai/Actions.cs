@@ -109,7 +109,22 @@ namespace Inscryption_ai
             
             return "Placement Successful";
         }
+
+        public static void GetCardFromDeck()
+        {
+            // Entrypoint.Instance.StartCoroutine(Singleton<CardDrawPiles3D>.Instance.DrawCardFromDeck());
+            Singleton<CardDrawPiles3D>.Instance.Pile.CursorSelectEnded.Invoke(Singleton<CardDrawPiles3D>.Instance.Pile);
+        }
         
-        
+        public static void GetCardFromSquirrelDeck()
+        {
+            // Entrypoint.Instance.StartCoroutine(Singleton<CardDrawPiles3D>.Instance.DrawFromSidePile());
+            Singleton<CardDrawPiles3D>.Instance.SidePile.CursorSelectEnded.Invoke(Singleton<CardDrawPiles3D>.Instance.SidePile);
+        }
+
+        public static string GetAllCardsInDeck()
+        {
+            return string.Join(", ", Singleton<CardDrawPiles>.Instance.Deck.Cards.Randomize().Select(c => c.DescribeToAI()));
+        }
     }
 }

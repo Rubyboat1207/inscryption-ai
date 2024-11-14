@@ -43,6 +43,31 @@ namespace Inscryption_ai
         }
     }
 
+    public class EphemeralAction
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public Dictionary<string, object> Schema { get; set; }
+
+        public EphemeralAction(string name, string description, Dictionary<string, object> schema)
+        {
+            this.Name = name;
+            this.Description = description;
+            this.Schema = schema;
+        }
+    }
+    
+    public class RegisterEphemeralActionGroup
+    {
+        [JsonPropertyName("path")] public string Type => "actions/register/ephemeral";
+        [JsonPropertyName("actions")] public List<EphemeralAction> Actions { get; set; }
+
+        public RegisterEphemeralActionGroup(List<EphemeralAction> actions)
+        {
+            Actions = actions;
+        }
+    }
+
     public class ActionResponse
     {
         [JsonPropertyName("path")] public string Type => "action/result";
@@ -64,6 +89,22 @@ namespace Inscryption_ai
         public AddEnvironmentContext(string value)
         {
             Value = value;
+        }
+    }
+    
+    public class RequestAction
+    {
+        [JsonPropertyName("path")] public string Type => "actions/request";
+    }
+    
+    public class ForceAction
+    {
+        [JsonPropertyName("path")] public string Type => "actions/force";
+        [JsonPropertyName("name")] public string Name { get; set; }
+
+        public ForceAction(string name)
+        {
+            Name = name;
         }
     }
 

@@ -171,7 +171,7 @@ namespace Inscryption_ai
 
         private async Task SendAllActions()
         {
-            // await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
             await Send(new RegisterAction("get_cards_in_hand", "Gets all of the cards currently in hand. Always run and wait for result before playing anything.", new Dictionary<string, object>() {}));
             await Send(new RegisterAction("get_ability_info", "Gives you information about the function of an ability", new Dictionary<string, object>()
             {
@@ -306,6 +306,10 @@ namespace Inscryption_ai
 
                             break;
                         default:
+                            if (res.Ok)
+                            {
+                                break;
+                            }
                             Console.WriteLine("Unknown request from AI");
                             Console.WriteLine(res.Type);
                             break;
