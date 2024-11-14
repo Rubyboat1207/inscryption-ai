@@ -96,9 +96,9 @@ namespace Inscryption_ai
             {
                 await Task.Delay(2);
             }
-            foreach (int idx in info.SacrificeIndexes)
+            foreach (var idx in info.SacrificeIndexes)
             {
-                CardSlot sac = Singleton<BoardManager>.Instance.PlayerSlotsCopy[idx];
+                var sac = Singleton<BoardManager>.Instance.PlayerSlotsCopy[idx];
                 Singleton<BoardManager>.Instance.OnSlotSelected(sac);
                 await Task.Delay(TimeSpan.FromSeconds(1.2));
             }
@@ -107,7 +107,30 @@ namespace Inscryption_ai
             
             Singleton<BoardManager>.Instance.OnSlotSelected(slot);
             
-            return "Placement Successful";
+            return "Placement Successful, (remember to use the new updated indices) hand is now: " + GetCardsInHand();
+        }
+
+        public class DrawCardParams
+        {
+            [JsonPropertyName("card_type")]
+            public string CardType { get; set; }
+        }
+
+        public static string DrawCardFromDeck(string drawCardJson)
+        {
+            var info = JsonSerializer.Deserialize<DrawCardParams>(drawCardJson);
+
+            if (info.CardType == "squirrel")
+            {
+                GetCardFromSquirrelDeck();
+            }
+            else
+            {
+                GetCardFromDeck();
+            }
+
+            return "New card in hand! (remember to use the new updated indices) Hand is now:" + GetCardsInHand();
+
         }
 
         public static void GetCardFromDeck()

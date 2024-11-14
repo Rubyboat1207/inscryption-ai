@@ -145,6 +145,7 @@ namespace Inscryption_ai
                 ["get_ability_info"] = Actions.CheckRuleBook,
                 ["get_cards_in_hand"] = _ => Actions.GetCardsInHand(),
                 ["see_board_state"] = _ => Singleton<BoardManager>.Instance.DescribeStateToAI(),
+                ["draw_from_deck"] = Actions.DrawCardFromDeck,
             };
 
             AsyncActionRegistry = new Dictionary<string, Func<string, Task<string>>>
@@ -250,69 +251,65 @@ namespace Inscryption_ai
         private void Update()
         {
             if (Responses.Count <= 0) return;
-            bool played_this_turn = false;
+            var playedThisTurn = false;
             try
             {
                 Console.WriteLine("Updating messages...");
                 foreach (var res in Responses.ToList())
                 {
-                    switch (res.Type)
+                    if (res.Type == "send_all_actions")
                     {
-                        case "send_all_actions":
-                            Console.WriteLine("Sending all actions");
-                            _ = SendAllActions();
-                            break;
-                        case "execute_action":
-                            Console.WriteLine("Executing action " + res.ActionName);
-                            if (res.ActionName == "play_card_in_hand")
+                        Console.WriteLine("Sending all actions");
+                        _ = SendAllActions();
+                    }
+                    else if (res.Type == "execute_action")
+                    {
+                        Console.WriteLine("Executing action " + res.ActionName);
+                        if (res.ActionName == "play_card_in_hand")
+                        {
+                            if (playedThisTurn)
                             {
-                                if (played_this_turn)
-                                {
-                                    _ = Send(new ActionResponse(res.ActionId,
-                                        "Only one play per action set. send it again, after checking board state and your hand."));
-                                    continue;
-                                }
-
-                                played_this_turn = true;
-                            }
-                            if (ActionRegistry.ContainsKey(res.ActionName))
-                            {
-                                try
-                                {
-                                    var actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
-                                    _ = Send(new ActionResponse(res.ActionId, actionResult));
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.Error.WriteLine(e);
-                                    _ = Send(new ActionResponse(res.ActionId,
-                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
-                                }
-                            }else if (AsyncActionRegistry.ContainsKey(res.ActionName))
-                            {
-                                try
-                                {
-                                    _ = RunActionAsync(res);
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine(e);
-                                    _ = Send(new ActionResponse(res.ActionId,
-                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
-                                }
+                                _ = Send(new ActionResponse(res.ActionId,
+                                    "Only one play per action set. send it again, ONLY AFTER checking board state and your hand."));
+                                return;
                             }
 
-                            
+                            playedThisTurn = true;
+                        }
 
-                            break;
-                        default:
-                            if (res.Ok)
+                        if (ActionRegistry.ContainsKey(res.ActionName))
+                        {
+                            try
                             {
-                                break;
+                                var actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
+                                _ = Send(new ActionResponse(res.ActionId, actionResult));
                             }
-                            Console.WriteLine("Unknown request from AI");
-                            Console.WriteLine(res.Type);
-                            break;
+                            catch (Exception e)
+                            {
+                                Console.Error.WriteLine(e);
+                                _ = Send(new ActionResponse(res.ActionId,
+                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                            }
+                        }
+                        else if (AsyncActionRegistry.ContainsKey(res.ActionName))
+                        {
+                            try
+                            {
+                                _ = RunActionAsync(res);
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e);
+                                _ = Send(new ActionResponse(res.ActionId,
+                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (res.Ok) continue;
+                        Console.WriteLine("Unknown request from AI");
+                        Console.WriteLine(res.Type);
                     }
                 }
             }

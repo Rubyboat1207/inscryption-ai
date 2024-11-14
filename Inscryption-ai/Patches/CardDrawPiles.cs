@@ -4,7 +4,7 @@ using HarmonyLib;
 
 namespace Inscryption_ai.Patches
 {
-    [HarmonyPatch(typeof(CardDrawPiles), nameof(CardDrawPiles.ChooseDraw))]
+    [HarmonyPatch(typeof(CardDrawPiles3D), nameof(CardDrawPiles3D.ChooseDraw))]
     public class OnDraw
     {
         public static void Prefix()
@@ -32,6 +32,7 @@ namespace Inscryption_ai.Patches
                 )
             }));
             _ = Entrypoint.Instance.Send(new ForceAction("draw_from_deck"));
+            
         }
     }
 }

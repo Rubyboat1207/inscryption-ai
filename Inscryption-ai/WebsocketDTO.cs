@@ -45,8 +45,11 @@ namespace Inscryption_ai
 
     public class EphemeralAction
     {
+        [JsonPropertyName("name")]
         public string Name { get; set; }
+        [JsonPropertyName("description")]
         public string Description { get; set; }
+        [JsonPropertyName("schema")]
         public Dictionary<string, object> Schema { get; set; }
 
         public EphemeralAction(string name, string description, Dictionary<string, object> schema)
