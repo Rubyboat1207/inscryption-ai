@@ -13,6 +13,7 @@ namespace Inscryption_ai
         private static ClientWebSocket _ws;
         private const int Port = 9302;
         public static List<WebSocketResponse> UnresolvedResponses { get; private set; }
+        private static readonly object _responsesLock = new object();
         
         private static async Task PollMessages()
         {
@@ -44,11 +45,12 @@ namespace Inscryption_ai
                         } while (!result.EndOfMessage);
 
                         // Process message if it's fully received
-                        if (result.MessageType != WebSocketMessageType.Close)
+                        if (result.MessageType == WebSocketMessageType.Close) continue;
+                        lock (_responsesLock)
                         {
                             UnresolvedResponses.Add(WebSocketResponseFactory.ParseResponse(message.ToString()));
-                            Console.WriteLine("Message received: " + message);
                         }
+                        Console.WriteLine("Message received: " + message);
                     }
                 }
                 catch (WebSocketException ex)
@@ -101,8 +103,8 @@ namespace Inscryption_ai
                 {
                     await callback();
                     break;
-
                 }
+                
                 await Task.Delay(1000);
 
                 attempts++;

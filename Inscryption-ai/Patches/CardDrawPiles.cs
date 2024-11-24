@@ -32,7 +32,7 @@ namespace Inscryption_ai.Patches
                 )
             }));
             _ = WebsocketManager.Send(new ForceAction("draw_from_deck"));
-            
+            _ = WebsocketManager.Send(new RequestAction());
         }
     }
 }
