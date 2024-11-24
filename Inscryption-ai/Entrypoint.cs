@@ -24,7 +24,8 @@ namespace Inscryption_ai
 
         public Dictionary<string, Func<string, string>> ActionRegistry { get; set; }
         public Dictionary<string, Func<string, Task<string>>> AsyncActionRegistry { get; set; }
-
+        private readonly object _responsesLock = new object();
+        
         public Entrypoint() : base()
         {
             var harmony = new Harmony(Info.Metadata.GUID);
@@ -105,11 +106,12 @@ namespace Inscryption_ai
                         } while (!result.EndOfMessage);
 
                         // Process message if it's fully received
-                        if (result.MessageType != WebSocketMessageType.Close)
+                        if (result.MessageType == WebSocketMessageType.Close) continue;
+                        lock (_responsesLock)
                         {
                             Responses.Add(WebSocketResponseFactory.ParseResponse(message.ToString()));
-                            Console.WriteLine("Message received: " + message);
                         }
+                        Console.WriteLine("Message received: " + message);
                     }
                 }
                 catch (WebSocketException ex)
@@ -146,6 +148,7 @@ namespace Inscryption_ai
                 ["get_cards_in_hand"] = _ => Actions.GetCardsInHand(),
                 ["see_board_state"] = _ => Singleton<BoardManager>.Instance.DescribeStateToAI(),
                 ["draw_from_deck"] = Actions.DrawCardFromDeck,
+                ["see_cards_in_deck"] = _ => Actions.GetAllCardsInDeck(),
             };
 
             AsyncActionRegistry = new Dictionary<string, Func<string, Task<string>>>
@@ -172,7 +175,7 @@ namespace Inscryption_ai
 
         private async Task SendAllActions()
         {
-            await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            await Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played. Do not ring if you had an error, this is only after you are done.", new Dictionary<string, object>() {}));
             await Send(new RegisterAction("get_cards_in_hand", "Gets all of the cards currently in hand. Always run and wait for result before playing anything.", new Dictionary<string, object>() {}));
             await Send(new RegisterAction("get_ability_info", "Gives you information about the function of an ability", new Dictionary<string, object>()
             {
@@ -213,6 +216,7 @@ namespace Inscryption_ai
                 }}
             }));
             await Send(new RegisterAction("see_board_state", "Gives you information about the board", new Dictionary<string, object>() {}));
+            await Send(new RegisterAction("see_cards_in_deck", "Gives you information about your deck", new Dictionary<string, object>() {}));
             await Send(new AddEnvironmentContext(
                 "Always wait for the results of actions before proceeding to the next step. Check the board state and hand after each action. Play the best card available based on the current board state and hand, focusing on strategy. Prioritize sacrificing cards when necessary to summon more powerful cards. Communicate clearly about actions taken and decisions made during the game."));
             await Send(new AddEnvironmentContext(
@@ -242,7 +246,7 @@ namespace Inscryption_ai
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine(e);
+                Console.WriteLine(e);
                 await Send(new ActionResponse(res.ActionId, "Action failed. Say this exactly along with whatever else: \"Tell Rubyboat there is a problem with the inscryption mod.\""));
             }
 
@@ -252,72 +256,76 @@ namespace Inscryption_ai
         {
             if (Responses.Count <= 0) return;
             var playedThisTurn = false;
-            try
+            lock (_responsesLock)
             {
-                Console.WriteLine("Updating messages...");
-                foreach (var res in Responses.ToList())
+                try
                 {
-                    if (res.Type == "send_all_actions")
+                    Console.WriteLine($"Updating messages... ({Responses.Count})");
+                    foreach (var res in Responses.ToList())
                     {
-                        Console.WriteLine("Sending all actions");
-                        _ = SendAllActions();
-                    }
-                    else if (res.Type == "execute_action")
-                    {
-                        Console.WriteLine("Executing action " + res.ActionName);
-                        if (res.ActionName == "play_card_in_hand")
+                        Console.WriteLine($"Responding to a {res.Type} action");
+                        if (res.Type == "send_all_actions")
                         {
-                            if (playedThisTurn)
+                            Console.WriteLine("Sending all actions");
+                            _ = SendAllActions();
+                        }
+                        else if (res.Type == "execute_action")
+                        {
+                            Console.WriteLine("Executing action " + res.ActionName);
+                            if (res.ActionName == "play_card_in_hand")
                             {
-                                _ = Send(new ActionResponse(res.ActionId,
-                                    "Only one play per action set. send it again, ONLY AFTER checking board state and your hand."));
-                                return;
+                                if (playedThisTurn)
+                                {
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Only one play per action set. send it again, ONLY AFTER checking board state and your hand."));
+                                    continue;
+                                }
+
+                                playedThisTurn = true;
                             }
 
-                            playedThisTurn = true;
+                            if (ActionRegistry.ContainsKey(res.ActionName))
+                            {
+                                try
+                                {
+                                    var actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
+                                    _ = Send(new ActionResponse(res.ActionId, actionResult));
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine(e);
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                                }
+                            }
+                            else if (AsyncActionRegistry.ContainsKey(res.ActionName))
+                            {
+                                try
+                                {
+                                    _ = RunActionAsync(res);
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine(e);
+                                    _ = Send(new ActionResponse(res.ActionId,
+                                        "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
+                                }
+                            }
                         }
-
-                        if (ActionRegistry.ContainsKey(res.ActionName))
+                        else
                         {
-                            try
-                            {
-                                var actionResult = ActionRegistry[res.ActionName].Invoke(res.Params);
-                                _ = Send(new ActionResponse(res.ActionId, actionResult));
-                            }
-                            catch (Exception e)
-                            {
-                                Console.Error.WriteLine(e);
-                                _ = Send(new ActionResponse(res.ActionId,
-                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
-                            }
+                            if (res.Ok) continue;
+                            Console.WriteLine("Unknown request from AI");
+                            Console.WriteLine(res.Type);
                         }
-                        else if (AsyncActionRegistry.ContainsKey(res.ActionName))
-                        {
-                            try
-                            {
-                                _ = RunActionAsync(res);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e);
-                                _ = Send(new ActionResponse(res.ActionId,
-                                    "Action failed. Tell Rubyboat there is a problem with the inscryption mod."));
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (res.Ok) continue;
-                        Console.WriteLine("Unknown request from AI");
-                        Console.WriteLine(res.Type);
                     }
                 }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error occured during foreach");
+                    Console.WriteLine(e);
+                }
             }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error occured during foreach");
-                Console.WriteLine(e);
-            } 
             
             Console.WriteLine("Actions executed. clearing responses");
             try

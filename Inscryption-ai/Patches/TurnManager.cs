@@ -19,6 +19,7 @@ namespace Inscryption_ai.Patches
             info += $"The battle is of type {encounterData.opponentType} at difficulty {encounterData.Difficulty}.";
             
             _ = Entrypoint.Instance.Send(new AddEnvironmentContext(info));
+            _ = Entrypoint.Instance.Send(new RequestAction());
         }
 
         public static void Postfix()

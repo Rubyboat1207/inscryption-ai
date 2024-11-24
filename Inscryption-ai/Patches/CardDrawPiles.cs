@@ -32,7 +32,7 @@ namespace Inscryption_ai.Patches
                 )
             }));
             _ = Entrypoint.Instance.Send(new ForceAction("draw_from_deck"));
-            
+            _ = Entrypoint.Instance.Send(new RequestAction());
         }
     }
 }
