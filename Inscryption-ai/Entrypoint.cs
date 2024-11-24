@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using DiskCardGame;
 using HarmonyLib;
@@ -25,6 +27,56 @@ namespace Inscryption_ai
                 return;
             }
             Instance = this;
+        }
+        
+        private void Update()
+        {
+            if (WebsocketManager.UnresolvedResponses.Count <= 0) return;
+            List<ActionRequest> actionRequests = new List<ActionRequest>();
+            try
+            {
+                foreach (var res in WebsocketManager.UnresolvedResponses.ToList())
+                {
+                    if (res.Type == "send_all_actions")
+                    {
+                        Console.WriteLine("Sending all actions");
+                        _ = Actions.SendAllActions();
+                    }
+                    else if (res.Type == "execute_action")
+                    {
+                        actionRequests.Add(new ActionRequest(res.ActionId, res.ActionName, res.Params));
+                    }
+                    else if (res.Type == "execute_code")
+                    {
+                        _ = Actions.RunCsCode(res.Message);
+                    }
+                    else
+                    {
+                        if (res.Ok) continue;
+                        Console.WriteLine("Unknown request from AI");
+                        Console.WriteLine(res.Type);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occured during foreach");
+                Console.WriteLine(e);
+            }
+
+            _ = Actions.RunActions(actionRequests);
+            
+            Console.WriteLine("Actions executed. clearing responses");
+            try
+            {
+                WebsocketManager.UnresolvedResponses.Clear();
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine("Error occured while clearing");
+                Console.WriteLine(e);
+            }
+            
         }
     }
 }
