@@ -8,12 +8,34 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using DiskCardGame;
 using Inscryption_ai.Extensions;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
 using UnityEngine;
 
 namespace Inscryption_ai
 {
     public static class Actions
     {
+        public static Dictionary<string, Func<string, string>> ActionRegistry { get; set; }
+        public static Dictionary<string, Func<string, Task<string>>> AsyncActionRegistry { get; set; }
+
+        public static void LoadActions()
+        {
+            ActionRegistry = new Dictionary<string, Func<string, string>>()
+            {
+                ["ring_bell"] = _ => Actions.RingBell(),
+                ["get_ability_info"] = Actions.CheckRuleBook,
+                ["get_cards_in_hand"] = _ => Actions.GetCardsInHand(),
+                ["see_board_state"] = _ => Singleton<BoardManager>.Instance.DescribeStateToAI(),
+                ["draw_from_deck"] = Actions.DrawCardFromDeck,
+            };
+
+            AsyncActionRegistry = new Dictionary<string, Func<string, Task<string>>>
+            {
+                ["play_card_in_hand"] = Actions.PlayCardInHand,
+            };
+        }
+        
         public static string RingBell()
         {
             var bell = GameObject.Find("CombatBell").GetComponent<CombatBell3D>();
@@ -133,13 +155,13 @@ namespace Inscryption_ai
 
         }
 
-        public static void GetCardFromDeck()
+        private static void GetCardFromDeck()
         {
             // Entrypoint.Instance.StartCoroutine(Singleton<CardDrawPiles3D>.Instance.DrawCardFromDeck());
             Singleton<CardDrawPiles3D>.Instance.Pile.CursorSelectEnded.Invoke(Singleton<CardDrawPiles3D>.Instance.Pile);
         }
         
-        public static void GetCardFromSquirrelDeck()
+        private static void GetCardFromSquirrelDeck()
         {
             // Entrypoint.Instance.StartCoroutine(Singleton<CardDrawPiles3D>.Instance.DrawFromSidePile());
             Singleton<CardDrawPiles3D>.Instance.SidePile.CursorSelectEnded.Invoke(Singleton<CardDrawPiles3D>.Instance.SidePile);
@@ -148,6 +170,131 @@ namespace Inscryption_ai
         public static string GetAllCardsInDeck()
         {
             return string.Join(", ", Singleton<CardDrawPiles>.Instance.Deck.Cards.Randomize().Select(c => c.DescribeToAI()));
+        }
+
+        public static async Task RunCsCode(string code)
+        {
+            var opt = ScriptOptions.Default;
+            opt = opt.AddReferences(
+                AppDomain.CurrentDomain.GetAssemblies()
+                    .Where(assembly => !assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
+            );
+            opt = opt.AddImports("System", "System.Collections.Generic", "UnityEngine", "Inscryption_ai.Extensions", "DiskCardGame");
+            try
+            {
+                var res = await CSharpScript.RunAsync(code, opt, null, null);
+                
+                Console.WriteLine(res);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            Console.WriteLine("Code execution complete.");
+        }
+        
+        public static async Task SendAllActions()
+        {
+            await WebsocketManager.Send(new RegisterAction("ring_bell", "rings the combat bell, forcing the next turn to be played", new Dictionary<string, object>() {}));
+            await WebsocketManager.Send(new RegisterAction("get_cards_in_hand", "Gets all of the cards currently in hand. Always run and wait for result before playing anything.", new Dictionary<string, object>() {}));
+            await WebsocketManager.Send(new RegisterAction("get_ability_info", "Gives you information about the function of an ability", new Dictionary<string, object>()
+            {
+                {"type", "object"},
+                {"properties", new Dictionary<string, object>
+                {
+                    {"ability", new Dictionary<string, object>
+                    {
+                        {"type", "string"},
+                        {"description", "the ID of the ability to search. Case sensitive. (often no spaces and is PascalCase)"}
+                    }}
+                }}
+            }));
+            await WebsocketManager.Send(new RegisterAction("play_card_in_hand", "Gives you information about the function of an ability", new Dictionary<string, object>()
+            {
+                {"type", "object"},
+                {"properties", new Dictionary<string, object>
+                {
+                    {"card_idx", new Dictionary<string, object>
+                    {
+                        {"type", "number"},
+                        {"description", "The index of the card you wish to play. Remember to re-check your hand to get updated indices after playing."}
+                    }},
+                    {"sacrifice_indexes", new Dictionary<string, object>
+                    {
+                        {"type", "array"},
+                        {"items", new Dictionary<string, object>
+                        {
+                            {"type", "number"}
+                        }},
+                        {"description", "If the card requires blood, the corresponding number of cards must be sacrificed, each giving 1 blood. Friendly board indices only. THIS IS NOT NULLABLE. THIS MUST BE PROVIDED."}
+                    }},
+                    {"placement_index", new Dictionary<string, object>
+                    {
+                        {"type", "number"},
+                        {"description", "What index on the board to place in. Friendly board indices only."}
+                    }}
+                }}
+            }));
+            await WebsocketManager.Send(new RegisterAction("see_board_state", "Gives you information about the board", new Dictionary<string, object>() {}));
+            await WebsocketManager.Send(new AddEnvironmentContext(
+                "Always wait for the results of actions before proceeding to the next step. Check the board state and hand after each action. Play the best card available based on the current board state and hand, focusing on strategy. Prioritize sacrificing cards when necessary to summon more powerful cards. Communicate clearly about actions taken and decisions made during the game."));
+            await WebsocketManager.Send(new AddEnvironmentContext(
+                "When facing a strong enemy like a Grizzly, prioritize playing defensive cards and using sacrifices wisely. Always check your hand and board after each action. Utilize cards with defensive abilities like the River Snapper when possible. Squirrels are essential for quick sacrifices, enabling powerful plays with cards like Wolves. Remember the power of sigils like Evolve and DebuffEnemy to strengthen your board presence and weaken foes. Plan sacrifices carefully to maintain a balanced hand and responsive board."));
+            
+        }
+
+        private static void ActionFailure(ActionRequest request, string details)
+        {
+            Console.WriteLine(details);
+
+            _ = WebsocketManager.Send(new ActionResponse(request.UUID,
+                "Say exactly: 'Someone tell rubyboat there is a problem with the inscryption mod' somewhere in your message"));
+        }
+        
+        public static async Task RunActions(List<ActionRequest> actionRequests)
+        {
+            foreach(var action in actionRequests)
+            {
+                if (ActionRegistry.ContainsKey(action.Name))
+                {
+                    try
+                    {
+                        ActionRegistry[action.Name].Invoke(action.Params);
+                    }
+                    catch (Exception e)
+                    {
+                        ActionFailure(action, e.ToString());
+                    }
+                }else if (AsyncActionRegistry.ContainsKey(action.Name))
+                {
+                    try
+                    {
+                        await AsyncActionRegistry[action.Name].Invoke(action.Params);
+                    }
+                    catch (Exception e)
+                    {
+                        ActionFailure(action, e.ToString());
+                    }
+                }
+                else
+                {
+                    ActionFailure(action, "Unknown action");
+                }
+            }
+        }
+    }
+    
+    public class ActionRequest
+    {
+        public string UUID { get; set; }
+        public string Name { get; set; }
+        public string Params { get; set; }
+
+        public ActionRequest(string uuid, string name, string parameters)
+        {
+            UUID = uuid;
+            Name = name;
+            Params = parameters;
         }
     }
 }

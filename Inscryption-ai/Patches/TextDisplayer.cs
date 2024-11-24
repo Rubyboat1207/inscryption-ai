@@ -8,7 +8,7 @@ namespace Inscryption_ai.Patches
     {
         public static void Prefix(string message)
         {
-            _ = Entrypoint.Instance.Send(new AddEnvironmentContext(message));
+            _ = WebsocketManager.Send(new AddEnvironmentContext(message));
         } 
     }
 }

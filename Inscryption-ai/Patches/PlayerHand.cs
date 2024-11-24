@@ -9,7 +9,7 @@ namespace Inscryption_ai.Patches
     {
         public static void Prefix(PlayableCard card)
         {
-            _ = Entrypoint.Instance.Send(new AddEnvironmentContext("[NEW CARD IN HAND]: " + card.DescribeToAI()));
+            _ = WebsocketManager.Send(new AddEnvironmentContext("[NEW CARD IN HAND]: " + card.DescribeToAI()));
         }
     }
 }

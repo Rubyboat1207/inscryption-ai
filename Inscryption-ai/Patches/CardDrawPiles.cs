@@ -9,7 +9,7 @@ namespace Inscryption_ai.Patches
     {
         public static void Prefix()
         {
-            _ = Entrypoint.Instance.Send(new RegisterEphemeralActionGroup(new List<EphemeralAction>
+            _ = WebsocketManager.Send(new RegisterEphemeralActionGroup(new List<EphemeralAction>
             {
                 new EphemeralAction(
                     "draw_from_deck", 
@@ -31,7 +31,7 @@ namespace Inscryption_ai.Patches
                     }
                 )
             }));
-            _ = Entrypoint.Instance.Send(new ForceAction("draw_from_deck"));
+            _ = WebsocketManager.Send(new ForceAction("draw_from_deck"));
             
         }
     }
